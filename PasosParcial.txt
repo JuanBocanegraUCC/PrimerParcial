@@ -1,0 +1,26 @@
+Pasos realizados para limpiar y cargar los datos:
+
+1. Por medio de Python se toma el archivo Support_DB.csv:
+
+El archivo tiene mezcla de delimitadores:
+
+Las 3 primeras columnas venían separadas por coma , (ticket_id, day_of_week, day_of_week_num).
+
+El resto de las columnas venían separadas por pipe |.
+
+Por eso en el código creó un parser line-by-line que une las dos partes correctamente.
+
+
+2. Parsing y limpieza inicial:
+
+Lee el archivo línea a línea.
+
+Separa la parte izquierda (primeros 3 campos con ,) y la parte derecha (resto con |).
+
+Normaliza encabezados (quita BOM y espacios).
+
+Convierte columnas numéricas conocidas (ej. ticket_id, day_of_week_num, company_id, past_30d_tickets).
+
+Elimina columnas totalmente vacías.
+
+Guarda Support_DB_clean.csv.
