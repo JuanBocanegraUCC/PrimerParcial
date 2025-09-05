@@ -1,6 +1,6 @@
-Pasos realizados para limpiar y cargar los datos:
+_- Pasos realizados para limpiar y cargar los datos:_
 
-1. Por medio de Python se toma el archivo Support_DB.csv:
+**1. Por medio de Python se toma el archivo Support_DB.csv:**
 
 El archivo tiene mezcla de delimitadores:
 
@@ -8,19 +8,172 @@ Las 3 primeras columnas venían separadas por coma , (ticket_id, day_of_week, da
 
 El resto de las columnas venían separadas por pipe |.
 
-Por eso en el código creó un parser line-by-line que une las dos partes correctamente.
+`def parse_mixed_delimiter(path):
+
+    rows = [ ]
+
+    with open(path, "r", encoding="utf-8-sig") as f:
+
+        for raw_line in f:
+
+            line = raw_line.rstrip("\n\r")
+
+            if not line:
+
+                continue
+
+            # Buscamos la primera ocurrencia de '|' (separador que marca el límite
+
+            # entre las primeras 3 columnas (con coma) y el resto (con pipe))
+
+            first_pipe = line.find("|")
+
+            if first_pipe == -1:
+
+                parts = [p.strip() for p in line.split(",")]
+
+                rows.append(parts)
+
+                continue
+
+  
+
+            left = line[:first_pipe]         # contiene las 3 primeras columnas separadas por ','
+
+            right = line[first_pipe + 1:]    # contiene el resto separado por '|'
+
+  
+
+            left_parts = [p.strip() for p in left.split(",")]
+
+            right_parts = [p.strip() for p in right.split("|")]
+
+  
+
+            combined = left_parts + right_parts
+
+            rows.append(combined)
+
+  
+
+    maxlen = max(len(r) for r in rows)
+
+    rows = [r + [""] * (maxlen - len(r)) for r in rows]
+
+  
+
+    header = rows[0]
+
+    data = rows[1:]`
 
 
-2. Parsing y limpieza inicial:
-
-Lee el archivo línea a línea.
-
-Separa la parte izquierda (primeros 3 campos con ,) y la parte derecha (resto con |).
+**2. limpieza inicial:**
 
 Normaliza encabezados (quita BOM y espacios).
 
-Convierte columnas numéricas conocidas (ej. ticket_id, day_of_week_num, company_id, past_30d_tickets).
+`df.columns = [c.replace("\ufeff", "").strip() for c in df.columns]`
 
 Elimina columnas totalmente vacías.
 
+def postprocess(df):
+
+    if "ticket_id" in df.columns:
+
+        df["ticket_id"] = pd.to_numeric(df["ticket_id"], errors="coerce")
+
+    if "day_of_week_num" in df.columns:
+
+        df["day_of_week_num"] = pd.to_numeric(df["day_of_week_num"], errors="coerce")
+
+    for col in ["company_id", "past_30d_tickets", "past_90d_incidents", "org_users",
+
+                "customers_affected", "error_rate_pct", "downtime_min"]:
+
+        if col in df.columns:
+
+            df[col] = pd.to_numeric(df[col].str.replace(",", "."), errors="coerce")
+
+  
+
+    empty_cols = [c for c in df.columns if df[c].eq("").all() or df[c].isna().all()]
+
+    if empty_cols:
+
+        print("Eliminando columnas vacías:", empty_cols)
+
+        df = df.drop(columns=empty_cols)
+
+  
+
+    return df
+
 Guarda Support_DB_clean.csv.
+
+_- Cuando ya se obtiene el nuevo archivo limpio, se empieza a aplicar EDA para corregir algunos datos que faltaron, en este caso el archivo es Support_DB_clean.csv:_
+
+**3. Aplicar EDA:**
+
+*   Se revisó la columna day_of_week, donde se encontró un valor en español ("Jue"). Este fue corregido y normalizado a "Thu" para que todos quedaran en inglés.
+    
+*   Se verificaron valores nulos en todas las columnas y se dejó un reporte de cuáles necesitan tratamiento.
+    
+*   Se exploraron las variables categóricas más importantes, como el día de la semana y el estado de los tickets, para ver su distribución y frecuencia.
+    
+*   Se analizaron las variables numéricas con estadísticas descriptivas (promedio, desviación estándar, mínimos y máximos) para detectar posibles valores atípicos o inconsistencias.
+    
+*   Se guardó el archivo final ya procesado y listo para análisis en la siguiente etapa.
+
+**4. Valores Obtenidos:**
+
+Total datos 50.031
+
+*   En la columna **day_of_week** había valores en español, por ejemplo `Jue: 4 registros`.  
+    → Estos se deberían normalizar a **Thu** (Thursday).
+    
+*   **Duplicados:** se encontraron **30 registros duplicados**.
+    
+*   **Valores nulos:** en total había **941 valores nulos**, distribuidos así:
+    *   ticket_id: 1 nulo
+        
+    *   industry: 34 nulos
+        
+    *   customer_sentiment: 906 nulos
+
+**_4.1 Cuántas categorías clave hay_**
+
+En el dataset limpio, estas son las columnas categóricas principales y cuántas categorías únicas tienen:
+*   **day_of_week** → 7 categorías (Mon, Tue, Wed, Thu, Fri, Sat, Sun)
+    
+*   **priority** → 3 categorías (High, Medium, Low)
+    
+*   **industry** → 5 categorías principales (Tech, Retail, Finance, Healthcare, Education)
+    
+*   **region** → 4 categorías (North America, Europe, LATAM, Asia-Pacific)
+    
+*   **product_area** → 6 categorías principales (Networking, Security, Storage, Cloud, Software, Hardware)
+    
+*   **customer_tier** → 3 categorías (Tier 1, Tier 2, Tier 3)
+    
+*   **customer_sentiment** → tiene valores, pero con **muchos nulos**
+    
+En total se identificaron **7 columnas categóricas clave**.
+
+**_4.2 En todo el proceso se aplicaron estas transformaciones:_**
+1.  **Parsing y unión de delimitadores mixtos** (coma + pipe).
+    
+2.  **Normalización de encabezados** (quitar BOM y espacios).
+    
+3.  **Conversión de tipos numéricos** en 7 columnas (`ticket_id`, `day_of_week_num`, `company_id`, `past_30d_tickets`, `past_90d_incidents`, `org_users`, `customers_affected`, `error_rate_pct`, `downtime_min`).
+    
+4.  **Eliminación de columnas vacías** (solo las que estaban 100% nulas).
+    
+5.  **Traducción de categorías en español** → 4 registros de `Jue` a `Thu`.
+    
+6.  **Eliminación de duplicados** → 30 filas eliminadas.
+    
+7.  **Manejo de valores nulos** → se identificaron 941 nulos (sin imputación, solo exploración).
+    
+En total se hicieron **7 transformaciones principales**.
+
+
+
