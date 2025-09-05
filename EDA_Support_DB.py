@@ -8,6 +8,8 @@ print("Shape:", df.shape)
 print("Columnas:", df.columns.tolist())
 print()
 
+df = df.replace("--", pd.NA)
+
 # Detectar si hay valores en español y mapearlos a inglés
 translate_days = {
     "Lun": "Mon",
