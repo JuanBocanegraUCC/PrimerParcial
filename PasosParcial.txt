@@ -8,63 +8,9 @@ Las 3 primeras columnas venían separadas por coma , (ticket_id, day_of_week, da
 
 El resto de las columnas venían separadas por pipe |.
 
-`def parse_mixed_delimiter(path):
+Se implementó un parser para unificar los delimitadores:
 
-    rows = [ ]
-
-    with open(path, "r", encoding="utf-8-sig") as f:
-
-        for raw_line in f:
-
-            line = raw_line.rstrip("\n\r")
-
-            if not line:
-
-                continue
-
-            # Buscamos la primera ocurrencia de '|' (separador que marca el límite
-
-            # entre las primeras 3 columnas (con coma) y el resto (con pipe))
-
-            first_pipe = line.find("|")
-
-            if first_pipe == -1:
-
-                parts = [p.strip() for p in line.split(",")]
-
-                rows.append(parts)
-
-                continue
-
-  
-
-            left = line[:first_pipe]         # contiene las 3 primeras columnas separadas por ','
-
-            right = line[first_pipe + 1:]    # contiene el resto separado por '|'
-
-  
-
-            left_parts = [p.strip() for p in left.split(",")]
-
-            right_parts = [p.strip() for p in right.split("|")]
-
-  
-
-            combined = left_parts + right_parts
-
-            rows.append(combined)
-
-  
-
-    maxlen = max(len(r) for r in rows)
-
-    rows = [r + [""] * (maxlen - len(r)) for r in rows]
-
-  
-
-    header = rows[0]
-
-    data = rows[1:]`
+`def parse_mixed_delimiter(path):     rows = []     with open(path, "r", encoding="utf-8-sig") as f:         for raw_line in f:             line = raw_line.rstrip("\n\r")             if not line:                 continue              # Detectar primer '|'             first_pipe = line.find("|")              # Caso sin '|': solo columnas con coma             if first_pipe == -1:                 parts = [p.strip() for p in line.split(",")]                 rows.append(parts)                 continue              # Separar en 2 bloques: coma y pipe             left = line[:first_pipe]      # columnas coma             right = line[first_pipe + 1:] # columnas pipe              left_parts = [p.strip() for p in left.split(",")]             right_parts = [p.strip() for p in right.split("|")]              combined = left_parts + right_parts             rows.append(combined)      # Normalización de longitud de filas     maxlen = max(len(r) for r in rows)     rows = [r + [""] * (maxlen - len(r)) for r in rows]      header = rows[0]     data = rows[1:]     return header, data`
 
 
 **2. limpieza inicial:**
@@ -73,49 +19,32 @@ Normaliza encabezados (quita BOM y espacios).
 
 `df.columns = [c.replace("\ufeff", "").strip() for c in df.columns]`
 
-Elimina columnas totalmente vacías.
+_2.2. Conversión de tipos de datos:_
 
-def postprocess(df):
+Varias columnas numéricas venían como texto, algunas con , en lugar de .  
+Se convirtieron a valores numéricos:
 
-    if "ticket_id" in df.columns:
+`def postprocess(df):     if "ticket_id" in df.columns:         df["ticket_id"] = pd.to_numeric(df["ticket_id"], errors="coerce")     if "day_of_week_num" in df.columns:         df["day_of_week_num"] = pd.to_numeric(df["day_of_week_num"], errors="coerce")      for col in ["company_id", "past_30d_tickets", "past_90d_incidents",                  "org_users", "customers_affected", "error_rate_pct", "downtime_min"]:         if col in df.columns:             df[col] = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")     return df`
 
-        df["ticket_id"] = pd.to_numeric(df["ticket_id"], errors="coerce")
+_2.3. Elimina columnas totalmente vacías:_
 
-    if "day_of_week_num" in df.columns:
-
-        df["day_of_week_num"] = pd.to_numeric(df["day_of_week_num"], errors="coerce")
-
-    for col in ["company_id", "past_30d_tickets", "past_90d_incidents", "org_users",
-
-                "customers_affected", "error_rate_pct", "downtime_min"]:
-
-        if col in df.columns:
-
-            df[col] = pd.to_numeric(df[col].str.replace(",", "."), errors="coerce")
-
-  
-
-    empty_cols = [c for c in df.columns if df[c].eq("").all() or df[c].isna().all()]
-
-    if empty_cols:
-
-        print("Eliminando columnas vacías:", empty_cols)
-
-        df = df.drop(columns=empty_cols)
-
-  
-
-    return df
-
-Guarda Support_DB_clean.csv.
+`empty_cols = [c for c in df.columns if df[c].eq("").all() or df[c].isna().all()]
+df = df.drop(columns=empty_cols)`
 
 _- Cuando ya se obtiene el nuevo archivo limpio, se empieza a aplicar EDA para corregir algunos datos que faltaron, en este caso el archivo es Support_DB_clean.csv:_
 
 **3. Aplicar EDA:**
 
 *   Se revisó la columna day_of_week, donde se encontró un valor en español ("Jue"). Este fue corregido y normalizado a "Thu" para que todos quedaran en inglés.
+
+`df["day_of_week"] = df["day_of_week"].replace("Jue", "Thu")`
     
 *   Se verificaron valores nulos en todas las columnas y se dejó un reporte de cuáles necesitan tratamiento.
+
+`duplicates = df[df.duplicated()]
+print(len(duplicates))`
+
+`df = df.drop_duplicates()`
     
 *   Se exploraron las variables categóricas más importantes, como el día de la semana y el estado de los tickets, para ver su distribución y frecuencia.
     
@@ -142,6 +71,11 @@ Total datos 50.031
 **_4.1 Cuántas categorías clave hay_**
 
 En el dataset limpio, estas son las columnas categóricas principales y cuántas categorías únicas tienen:
+
+`for col in ["day_of_week", "priority", "industry", "region", 
+            "product_area", "customer_tier", "customer_sentiment"]:
+    print(col, df[col].nunique())`
+
 *   **day_of_week** → 7 categorías (Mon, Tue, Wed, Thu, Fri, Sat, Sun)
     
 *   **priority** → 3 categorías (High, Medium, Low)
@@ -176,4 +110,16 @@ En total se identificaron **7 columnas categóricas clave**.
 En total se hicieron **7 transformaciones principales**.
 
 
+**5. Conclusiones**
 
+| Aspecto | Dataset inicial (`Support_DB.csv`) | Dataset final (`Support_DB_EDA_ready.csv`) |
+| --- | --- | --- |
+| **Estructura** | Delimitadores mixtos (`,` y ` | `) → no podía cargarse directamente en pandas/SQL. |
+| **Encabezados** | Algunos con `\ufeff` (BOM) y espacios extra. | Normalizados y estandarizados. |
+| **Tipos de datos** | 7 columnas numéricas cargaban como texto (ej: `"34,5"`). | Convertidas correctamente a `float`/`int`. |
+| **Columnas vacías** | Existencia de columnas 100% nulas. | Eliminadas del dataset. |
+| **Consistencia categórica** | Valores mezclados en idioma (`Jue` en español). | Uniformados a inglés (`Thu`). |
+| **Duplicados** | 30 filas repetidas. | Eliminadas. |
+| **Valores nulos** | 941 valores nulos distribuidos en 3 columnas clave. | Detectados y reportados (sin imputación aún). |
+| **Categorización** | Columnas categóricas sin explorar. | Identificadas 7 columnas clave (día, industria, tier, etc.). |
+| **Numéricas** | Outliers no detectados. | Se identificaron outliers en `downtime_min` (>100 min). |
